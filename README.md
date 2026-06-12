@@ -205,9 +205,9 @@ If you use this code or dataset, please cite:
 > DOI: `https://doi.org/XXXX/XXXXXXXXX` *(placeholder)*
 
 Dataset:
-> *Adrah, E. (2025). IrrEM — 25-year seasonal irrigation extent, eastern Mediterranean [Dataset]. Zenodo.*
+> *Adrah, E. (2025). Data IrrEM (Irrigation in the eastern Mediterranean): Two and a half decades of seasonal high-resolution (30m) irrigated land maps of the eastern Mediterranean (2000-2025) [Dataset]. Zenodo.*
 >
-> DOI: `https://doi.org/10.5281/zenodo.XXXXXXX` *(placeholder)*
+> DOI: `https://doi.org/10.5281/zenodo.17574601`
 
 ---
 ## Acknowledgments
