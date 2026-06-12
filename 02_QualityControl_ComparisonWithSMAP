@@ -1,0 +1,222 @@
+//######################################################################################
+// #### Kent State University - SenslandLab - 2026 ####
+// ### Esmaeel Adrah eadrah@kent.edu | esmaeelad@gmail.com ###
+// 
+// Description: Computes Soil Moisture from Landsat using OPTRAM parameters. 
+// Compares results to SMAP soil moisture pixel-by-pixel.
+// Outputs: 
+//   1. Time-series chart of Pearson's R and RMSE.
+//   2. Visual map layer of the Mean OPTRAM SM.
+//   3. CSV export of correlation metrics.
+//######################################################################################
+
+// ==============================================================================
+// 1. GLOBAL INPUTS & SETUP
+// ==============================================================================
+var WRS_Path = 172;
+var WRS_Row = 34;
+var start_year = 2024; 
+var end_year = 2025; 
+
+var Prdays = 8; 
+var SM_BAND = 'winsorized'; // Options: 'SM' or 'winsorized'
+
+var soilMoisturePalette = ['brown', 'orange', 'yellow', 'green', 'blue'];
+var vis = {min: 0, max: 1, palette: soilMoisturePalette};
+
+// Define Helper Masks
+var WC_ESA = ee.ImageCollection("ESA/WorldCover/v100").first(); 
+var NotMask = WC_ESA.neq(50).and(WC_ESA.neq(80)).and(WC_ESA.neq(10)); 
+
+var precipitationColl = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+  .filter(ee.Filter.date((start_year - 2) + '-12-01', end_year + '-12-31'))
+  .select(['precipitation'], ['pr']);
+
+var smapCollection = ee.ImageCollection("NASA/SMAP/SPL3SMP_E/006")
+  .merge(ee.ImageCollection("NASA/SMAP/SPL3SMP_E/005"))
+  .filter(ee.Filter.date((start_year - 2) + '-12-01', end_year + '-12-31'))
+  .select(['soil_moisture_am'], ['Smap_SM']);
+
+// Load Validated Parameters
+var paramList = ee.FeatureCollection('projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/OptramParams_Final_Updated')
+  .filter(ee.Filter.eq('Parameter Check', 'ok'))
+  .filter(ee.Filter.eq('wrs_path', WRS_Path))
+  .filter(ee.Filter.eq('wrs_row', WRS_Row));
+
+// ==============================================================================
+// 2. CORE FUNCTIONS
+// ==============================================================================
+
+function QualityMask(img) {
+  var qa = img.select('QA_PIXEL');
+  var saturation = img.select("QA_RADSAT").eq(0);
+  
+  var bitwiseMask = ee.Image(0)
+    .or(qa.bitwiseAnd(1 << 0)) .or(qa.bitwiseAnd(1 << 1)) .or(qa.bitwiseAnd(1 << 2)) 
+    .or(qa.bitwiseAnd(1 << 3)) .or(qa.bitwiseAnd(1 << 4)) .or(qa.bitwiseAnd(1 << 5))
+    .or(qa.bitwiseAnd(1 << 9).and(qa.bitwiseAnd(1 << 10))) 
+    .or(qa.bitwiseAnd(1 << 8).and(qa.bitwiseAnd(1 << 11)))
+    .or(qa.bitwiseAnd(1 << 9).and(qa.bitwiseAnd(1 << 11))).not();
+    
+  var scaledBands = img.select("SR_B.").multiply(0.0000275).add(-0.2);
+  return scaledBands.updateMask(bitwiseMask.and(saturation)).set({
+    "system:time_start": img.get("system:time_start"),
+    "year": img.date().get("year")
+  });
+}
+
+function PrepareLandsat45789(Path, Row) {
+  function filterCol(col) {
+    return col.filter(ee.Filter.calendarRange(start_year - 1, end_year, 'year'))
+      .filter(ee.Filter.eq('WRS_PATH', Path))
+      .filter(ee.Filter.eq('WRS_ROW', Row))
+      .filter(ee.Filter.lt('CLOUD_COVER', 75));
+  }
+
+  var l4 = filterCol(ee.ImageCollection('LANDSAT/LT04/C02/T1_L2'));
+  var l5 = filterCol(ee.ImageCollection('LANDSAT/LT05/C02/T1_L2'));
+  var l7 = filterCol(ee.ImageCollection('LANDSAT/LE07/C02/T1_L2').filter(ee.Filter.calendarRange(1999, 2017, 'year')));
+  var l8 = filterCol(ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')).select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7','QA_PIXEL','QA_RADSAT'], ['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7','QA_PIXEL','QA_RADSAT']);
+  var l9 = filterCol(ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')).select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7','QA_PIXEL','QA_RADSAT'], ['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7','QA_PIXEL','QA_RADSAT']);
+
+  return ee.ImageCollection(l9.merge(l8).merge(l7).merge(l4).merge(l5))
+    .map(QualityMask)
+    .select(['SR_B1','SR_B2','SR_B3','SR_B4','SR_B5','SR_B7'], ['blue','green','red','nir','swir1','swir2']);
+}
+
+// ==============================================================================
+// 3. MAIN PIPELINE
+// ==============================================================================
+
+// Establish Footprint
+var RawLandsat = PrepareLandsat45789(WRS_Path, WRS_Row);
+var LandsatFootprintGeom = RawLandsat.first().geometry();
+var LandsatFootprintMask = ee.Image(1).clip(LandsatFootprintGeom);
+
+// Map OPTRAM Indices
+var OPTRAM_ReadyCollection = RawLandsat.map(function(img) {
+  var ndvi = img.normalizedDifference(["nir", "red"]).rename("ndvi").float();
+  var Rswir = img.select('swir1').rename('Rswir');
+  var STR = img.expression('((Rswir - 1) * (Rswir - 1)) / (2 * Rswir)', {'Rswir': Rswir}).rename('STR');  
+  return ee.Image.cat(ndvi, STR).copyProperties(img, img.propertyNames());
+}); 
+
+// Map Precipitation
+OPTRAM_ReadyCollection = OPTRAM_ReadyCollection.map(function(img) {
+  var dateL = ee.Date(img.get('system:time_start'));
+  var matchesPr = precipitationColl
+    .filter(ee.Filter.lte('system:time_start', dateL.millis()))
+    .filter(ee.Filter.gt('system:time_start', dateL.millis().subtract(Prdays * 24 * 60 * 60 * 1000)))
+    .sort('system:time_start', false).sum().updateMask(LandsatFootprintMask);  
+  return ee.Image.cat(img, matchesPr).copyProperties(img, img.propertyNames());
+});
+
+// Join Parameters & Calculate SM
+var JoinedCol = ee.Join.saveFirst('matched').apply({
+  primary: OPTRAM_ReadyCollection, secondary: paramList,
+  condition: ee.Filter.equals({ leftField: 'year', rightField: 'year' })
+});
+
+var SM_Col = ee.ImageCollection(JoinedCol).map(function(img) {
+  var OptramReady = img.updateMask(img.select('STR')).updateMask(NotMask); 
+  var matched = ee.Feature(img.get('matched'));
+
+  var id = ee.Number(matched.get('id'));
+  var iw = ee.Number(matched.get('iw'));
+  var sd = ee.Number(matched.get('sd'));
+  var sw = ee.Number(matched.get('sw')); 
+
+  var Optram_SM = OptramReady.expression(
+    '(id + sd * ndvi - STR) / (id - iw + (sd - sw) * ndvi)', 
+    { 'id': id, 'sd': sd, 'ndvi': OptramReady.select('ndvi'), 'STR': OptramReady.select('STR'), 'iw': iw, 'sw': sw }
+  ).rename('SM');
+    
+  var Stats = Optram_SM.clamp(-5, 5).reduceRegion({
+    reducer: ee.Reducer.mean().combine(ee.Reducer.stdDev(),'',true), 
+    geometry: LandsatFootprintGeom, scale: 30, maxPixels: 1e13
+  });
+
+  var OutlierThreshold = ee.Number(Stats.get('SM_stdDev')).multiply(3).add(ee.Number(Stats.get('SM_mean')));
+  var WinsorizedStd = Optram_SM.clamp(OutlierThreshold.multiply(-1), OutlierThreshold)
+    .unitScale(OutlierThreshold.multiply(-1), OutlierThreshold).rename('winsorized');
+
+  return ee.Image.cat(Optram_SM, WinsorizedStd).copyProperties(img, ['system:time_start']).set(Stats);
+});
+
+// Match SMAP & Calculate Correlation
+var CorrelationCol = SM_Col.map(function(im) {
+  var dateL = ee.Date(im.get('system:time_start'));
+  var matchesSM = smapCollection
+    .filter(ee.Filter.lte('system:time_start', dateL.millis()))
+    .filter(ee.Filter.gt('system:time_start', dateL.millis().subtract(5 * 24 * 60 * 60 * 1000))) 
+    .sort('system:time_start', false);
+                      
+  var firstSMAP = matchesSM.reduce(ee.Reducer.firstNonNull());
+
+  var imWithSMAP = ee.Algorithms.If(ee.Number(firstSMAP.bandNames().size()).gte(1),
+    ee.Image.cat(im, firstSMAP.select(['Smap_SM_first'], ['Smap_SM'])),
+    ee.Image.cat(im, ee.Image(999).rename("Smap_SM").updateMask(LandsatFootprintMask))
+  );
+
+  var imgToCorrelate = ee.Image(imWithSMAP).select([SM_BAND, 'Smap_SM'], ['Optram_SM', 'Smap_SM']);
+  var optramScaled = imgToCorrelate.select('Optram_SM').unitScale(0, 100);
+  var smapScaled = imgToCorrelate.select('Smap_SM').updateMask(optramScaled);
+  var CorAll = ee.Image.cat(smapScaled, optramScaled);
+
+  var reduced = CorAll.reduceRegion({
+    reducer: ee.Reducer.pearsonsCorrelation(), 
+    geometry: LandsatFootprintGeom, scale: 8905.559, tileScale: 16
+  });
+  
+  var diff = CorAll.select('Smap_SM').subtract(CorAll.select('Optram_SM'));
+  var meanS = diff.multiply(diff).reduceRegion({
+    reducer: ee.Reducer.mean(), geometry: LandsatFootprintGeom, scale: 8905.559, maxPixels: 1e8
+  });
+
+  var RMSE = ee.Number(meanS.get('Smap_SM'));
+  RMSE = ee.Algorithms.If(ee.Algorithms.IsEqual(RMSE, null), ee.Number(999), RMSE);
+  RMSE = ee.Number(RMSE).sqrt();
+
+  return ee.Feature(null, {
+    'RMSE': RMSE,
+    'correlation': reduced.get('correlation'),
+    'Pvalue': reduced.get('p-value'),
+    'date': dateL.format('YYYY-MM-dd')
+  });
+});
+
+// Remove null/empty correlations (where SMAP was 999 or masked)
+var correlationFeatures = CorrelationCol.filter(ee.Filter.neq('correlation', null));
+
+// ==============================================================================
+// 4. UI CHART, MAP LAYER & EXPORT
+// ==============================================================================
+
+// 4A. Plot Time-Series Chart to Console
+var chart = ui.Chart.feature.byFeature(correlationFeatures, 'date', ['correlation', 'RMSE'])
+  .setOptions({
+    title: 'SMAP vs OPTRAM Correlation & RMSE over Time (Path ' + WRS_Path + ' / Row ' + WRS_Row + ')',
+    hAxis: {title: 'Date', format: 'YYYY-MM'},
+    vAxes: {
+      0: {title: 'Pearson Correlation (R)', viewWindow: {min: -1, max: 1}},
+      1: {title: 'RMSE (Volumetric)', viewWindow: {min: 0}}
+    },
+    series: {
+      0: {targetAxisIndex: 0, color: '#1f77b4', lineWidth: 2, pointSize: 4}, // Blue for Correlation
+      1: {targetAxisIndex: 1, color: '#d62728', lineWidth: 2, pointSize: 4}  // Red for RMSE
+    }
+  });
+print(chart);
+
+// 4B. Add Mean OPTRAM SM to Map
+var meanOptramImage = SM_Col.select(SM_BAND).mean();
+Map.centerObject(LandsatFootprintGeom, 10);
+Map.addLayer(meanOptramImage, vis, 'Mean OPTRAM SM');
+
+// 4C. Export CSV
+Export.table.toDrive({
+  collection: correlationFeatures,
+  description: 'Cor_' + WRS_Path + '_' + WRS_Row,
+  folder: 'Correlation_SMAP_OPTRAM',
+  fileFormat: 'CSV'
+});
