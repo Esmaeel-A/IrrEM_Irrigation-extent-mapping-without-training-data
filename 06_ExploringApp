@@ -1,0 +1,231 @@
+
+/**
+ * APP: Seasonal Irrigation Area Change Explorer
+//######################################################################################
+//#### Kent State University - SenslandLab - 2026 ####
+//### Esmaeel Adrah eadrah@kent.edu esmaeelad@gmail.com ###
+//######################################################################################
+
+
+ */
+var newNames = ['Ir2000','Ir2001','Ir2002','Ir2003','Ir2004','Ir2005','Ir2006','Ir2007','Ir2008','Ir2009','Ir2010','Ir2011','Ir2012','Ir2013','Ir2014','Ir2015','Ir2016','Ir2017','Ir2018','Ir2019','Ir2020','Ir2021','Ir2022','Ir2023','Ir2024','Ir2025']
+
+var scaleOfchoice = 500
+var imageC = ee.ImageCollection('projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/Final/Ir_Summ_Wsmooth')
+var offSeasonImage = imageC.filter(
+  ee.Filter.stringStartsWith('system:index', 'Ir_Summ_Wsmooth')
+).toBands().rename(newNames)
+print(imageC)
+var inSeasonImage = imageC.filter(
+  ee.Filter.stringStartsWith('system:index', 'Ir_Supp_Wsmooth')
+).toBands().rename(newNames)
+var boundaries = ee.FeatureCollection("projects/ee-hyinhe/assets/Esmaeel/LessIsMore_GEDI_TreeCrops/Inputs/Syria_Boundaries");
+var CropMask = ee.ImageCollection('ESA/WorldCover/v200').first().eq(40)
+var rainfedImage = inSeasonImage.add(CropMask).eq(1)
+
+// ==========================================
+// 1. DATA PREPARATION
+// ==========================================
+var years = ee.List.sequence(2000, 2025);
+
+var yearArray = [];
+for (var i = 2000; i <= 2025; i++) {
+  yearArray.push(i.toString());
+}
+
+var areaCol = ee.ImageCollection.fromImages(
+  years.map(function(y) {
+    var bandName = ee.String('Ir').cat(ee.Number(y).format('%d'));
+    
+    var inArea = inSeasonImage.select([bandName])
+      .multiply(ee.Image.pixelArea()).divide(1e6).rename('In_Season'); 
+      
+    var offArea = offSeasonImage.select([bandName])
+      .multiply(ee.Image.pixelArea()).divide(1e6).rename('Off_Season');
+      
+    // var rainArea = rainfedImage.select([bandName])
+    //   .multiply(ee.Image.pixelArea()).divide(1e6).rename('Rainfed');
+      
+    return inArea.addBands(offArea)//.addBands(rainArea)
+      .set('system:time_start', ee.Date.fromYMD(y, 1, 1).millis());
+  })
+);
+
+// ==========================================
+// 2. UI WIDGETS
+// ==========================================
+var mainPanel = ui.Panel({
+  style: {width: '400px', padding: '15px'}
+});
+
+var title = ui.Label('Eastern Mediteranean Irrigation Area Explorer', {
+  fontWeight: 'bold', fontSize: '22px', margin: '0 0 10px 0'
+});
+
+var subTitle = ui.Label('Compare In-Season, Off-Season irrigated areas ', {
+  color: 'gray', margin: '0 0 20px 0'
+});
+
+var countrySelect = ui.Select({
+  placeholder: 'Loading countries...', style: {width: '100%'}
+});
+
+var provinceSelect = ui.Select({
+  placeholder: 'Select Province (Optional)...', disabled: true, style: {width: '100%'}
+});
+
+// Create TWO dropdowns for the split map
+var yearSelectLeft = ui.Select({
+  items: yearArray, value: '2000', style: {width: '100%'}, onChange: updateAnalysis
+});
+
+var yearSelectRight = ui.Select({
+  items: yearArray, value: '2024', style: {width: '100%'}, onChange: updateAnalysis
+});
+
+var chartPanel = ui.Panel({style: {margin: '20px 0 0 0'}});
+
+// Map Setup for Split Panel
+var leftMap = ui.Map();
+var rightMap = ui.Map();
+leftMap.setOptions('HYBRID');
+rightMap.setOptions('HYBRID');
+
+// Link the two maps so panning/zooming one moves the other
+var linker = ui.Map.Linker([leftMap, rightMap]);
+
+// Create the Split Panel with the swiper (wipe)
+var splitMap = ui.SplitPanel({
+  firstPanel: linker.get(0),
+  secondPanel: linker.get(1),
+  orientation: 'horizontal',
+  wipe: true,
+  style: {stretch: 'both'}
+});
+
+ui.root.clear();
+ui.root.add(mainPanel);
+ui.root.add(splitMap); // Add split panel instead of a single map
+
+mainPanel.add(title)
+         .add(subTitle)
+         .add(ui.Label('1. Select Country:', {fontWeight: 'bold'}))
+         .add(countrySelect)
+         .add(ui.Label('2. Select Province:', {fontWeight: 'bold'}))
+         .add(provinceSelect)
+         .add(ui.Label('3. Left Map Year:', {fontWeight: 'bold'}))
+         .add(yearSelectLeft)
+         .add(ui.Label('4. Right Map Year:', {fontWeight: 'bold'}))
+         .add(yearSelectRight)
+         .add(chartPanel);
+
+// ==========================================
+// 3. LOGIC & INTERACTIVITY
+// ==========================================
+
+boundaries.aggregate_array('ADM0_NAME').distinct().sort().evaluate(function(list) {
+  if (list) {
+    countrySelect.items().reset(list);
+    countrySelect.setPlaceholder('Select Country...');
+    countrySelect.onChange(updateProvinceList);
+  }
+});
+
+function updateProvinceList(country) {
+  if (!country) return;
+  
+  provinceSelect.setPlaceholder('Loading provinces...');
+  provinceSelect.setDisabled(true);
+  
+  var provinces = boundaries.filter(ee.Filter.eq('ADM0_NAME', country))
+    .aggregate_array('ADM1_NAME').distinct().sort();
+  
+  provinces.evaluate(function(list) {
+    provinceSelect.items().reset(['All Provinces'].concat(list));
+    provinceSelect.setPlaceholder('Select Province (Optional)...');
+    provinceSelect.setDisabled(false);
+    
+    provinceSelect.onChange(updateAnalysis);
+    provinceSelect.setValue('All Provinces', false); 
+    updateAnalysis();
+  });
+}
+
+function updateAnalysis() {
+  var country = countrySelect.getValue();
+  var province = provinceSelect.getValue();
+  var yearLeft = yearSelectLeft.getValue(); 
+  var yearRight = yearSelectRight.getValue(); 
+  
+  if (!country) return;
+
+  chartPanel.clear();
+  chartPanel.add(ui.Label('Calculating areas and generating chart... (This may take a moment)', {color: 'gray'}));
+  
+  var roi = boundaries.filter(ee.Filter.eq('ADM0_NAME', country));
+  var regionName = country;
+  
+  if (province && province !== 'All Provinces') {
+    roi = roi.filter(ee.Filter.eq('ADM1_NAME', province));
+    regionName = province + ', ' + country;
+  }
+  
+  // Update Both Maps
+  leftMap.clear();
+  rightMap.clear();
+  leftMap.centerObject(roi, 6); // Centering left automatically centers right due to linkage
+  
+  // Add year labels to maps so user knows which side is which
+  leftMap.add(ui.Label(yearLeft, {position: 'top-left', fontWeight: 'bold', fontSize: '18px'}));
+  rightMap.add(ui.Label(yearRight, {position: 'top-right', fontWeight: 'bold', fontSize: '18px'}));
+  
+  var empty = ee.Image().byte();
+  var roiOutline = empty.paint({featureCollection: roi, color: 1, width: 2});
+  leftMap.addLayer(roiOutline, {palette: ['#ffffff']}, regionName + ' Boundary');
+  rightMap.addLayer(roiOutline, {palette: ['#ffffff']}, regionName + ' Boundary');
+  
+  // Strings for the selected bands
+  var bandStrL = 'Ir' + yearLeft;
+  var bandStrR = 'Ir' + yearRight;
+  
+  // Left Map Layers
+  var inL = inSeasonImage.select(bandStrL).selfMask();
+  var offL = offSeasonImage.select(bandStrL).selfMask();
+  var rainL = rainfedImage.select(bandStrL).selfMask(); 
+  
+  leftMap.addLayer(inL.clip(roi), {palette: ['#2ca02c']}, 'In-Season ' + yearLeft + ' (Green)');
+  leftMap.addLayer(offL.clip(roi), {palette: ['#00a8ff']}, 'Off-Season ' + yearLeft + ' (Blue)');
+  // leftMap.addLayer(rainL.clip(roi), {palette: ['#ff9900']}, 'Rainfed ' + yearLeft + ' (Orange)');
+  
+  // Right Map Layers
+  var inR = inSeasonImage.select(bandStrR).selfMask();
+  var offR = offSeasonImage.select(bandStrR).selfMask();
+  var rainR = rainfedImage.select(bandStrR).selfMask(); 
+  
+  rightMap.addLayer(inR.clip(roi), {palette: ['#2ca02c']}, 'In-Season ' + yearRight + ' (Green)');
+  rightMap.addLayer(offR.clip(roi), {palette: ['#00a8ff']}, 'Off-Season ' + yearRight + ' (Blue)');
+  // rightMap.addLayer(rainR.clip(roi), {palette: ['#ff9900']}, 'Rainfed ' + yearRight + ' (Orange)');
+  
+  // Generate Chart
+  var chart = ui.Chart.image.series({
+    imageCollection: areaCol,
+    region: roi.geometry(),
+    reducer: ee.Reducer.sum(),
+    scale: scaleOfchoice, 
+    xProperty: 'system:time_start'
+  }).setOptions({
+    title: 'Agricultural Area Trends: ' + regionName,
+    hAxis: {title: 'Year', format: 'yyyy', gridlines: {count: 5}},
+    vAxis: {title: 'Total Area (km²)', minValue: 0},
+    lineWidth: 3,
+    pointSize: 5,
+    series: {
+      0: {color: '#2ca02c', labelInLegend: 'In-Season'},  
+      1: {color: '#00a8ff', labelInLegend: 'Off-Season'},  
+      2: {color: '#ff9900', labelInLegend: 'Rainfed'}     
+    }
+  });
+
+  chartPanel.clear();
+  chartPanel.add(chart);
+}
