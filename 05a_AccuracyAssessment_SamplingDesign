@@ -1,0 +1,198 @@
+//######################################################################################
+// #### Kent State University - SenslandLab - 2026 ####
+// ### Esmaeel Adrah (eadrah@kent.edu)  esmaeelad@gmail.com ###
+// ==============================================================================
+// ==================== ACCURACY ASSESSMENT: SAMPLING SCRIPT ====================
+// ==============================================================================
+// Description: Quality control step. Generates stratified random sample points 
+// across the Eastern Mediterranean study area (partitioned into Turkey and Syria). 
+// Extracts the 95th percentile summer NDVI from Landsat for every year (2000-2023)
+// at each sample point to assist in manual reference classification. Exports 
+// KMZ boundaries for visual assessment and CSVs of the reference timeseries.
+// ==============================================================================
+
+// ------------------------------------------------------------------------------
+// 1. GLOBAL VARIABLES & REGIONS
+// ------------------------------------------------------------------------------
+var years = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011,
+             2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
+
+// Load Boundaries
+var boundary = ee.FeatureCollection('projects/ee-hyinhe/assets/Esmaeel/LessIsMore_GEDI_TreeCrops/Inputs/Syria_Boundaries');
+var Turkey = boundary.filter(ee.Filter.eq('ADM0_NAME', 'Turkey'));
+var other = boundary.filter(ee.Filter.eq('ADM0_NAME', 'Turkey').not());
+
+// Load Processed Irrigation Data & Masks
+var irrExtent = ee.ImageCollection('projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/Final/Ir_Summ');
+var img = ee.Image('projects/ee-hyinhe/assets/Jesse/Syria/workspace/Abandonment_all');
+var mask = img.gt(0);
+mask = ee.Image(1).where(mask.eq(0), 0); 
+
+// Map.addLayer(mask, null, 'mask');
+
+// ------------------------------------------------------------------------------
+// 2. STRATIFIED SAMPLING (Using 2023 Mode)
+// ------------------------------------------------------------------------------
+// Create base image for stratification from 2023
+var im23 = irrExtent.filter(ee.Filter.eq('year', 2023)).mode()
+  .clip(boundary)
+  .updateMask(mask)
+  .setDefaultProjection({crs: 'EPSG:32637', scale: 30});
+
+Map.addLayer(im23, {min: 0, max: 1}, 'Irrigation Mode 2023');
+
+// Note: The 'region: table' variable was undefined in the original snippet. 
+// Assuming it should be 'boundary' based on the clip above.
+var samples = im23.stratifiedSample({
+  numPoints: 200, 
+  scale: 30, 
+  seed: 19, 
+  dropNulls: true,
+  region: boundary, // Corrected from 'table'
+  geometries: true
+});
+
+// Assign unique ID to each set of points
+var idList = ee.List.sequence(0, 399);  // 200 points * 2 classes = 400
+var list = samples.toList(400);
+
+var samples = ee.FeatureCollection(idList.map(function(ID){
+  var feat = ee.Feature(list.get(ID));
+  return feat.set('ID', ee.Number(ID));
+}));
+
+// Add a random column for splitting subsets
+samples = samples.randomColumn();
+
+// Split into Subsets
+var set3 = samples.filterBounds(Turkey);
+var rest = samples.filterBounds(other);
+var set1 = rest.filter(ee.Filter.lte('random', 0.6));
+var set2 = rest.filter(ee.Filter.gte('random', 0.328));
+
+// ------------------------------------------------------------------------------
+// 3. EXPORT INITIAL KMZ BOUNDARIES (For Google Earth digitizing)
+// ------------------------------------------------------------------------------
+Export.table.toDrive({
+  collection: set3.map(function(f){ return f.buffer(15).bounds(); }),
+  fileFormat: 'KMZ',
+  description: 'Samples_EM_set3',
+});
+
+Export.table.toDrive({
+  collection: set1.map(function(f){ return f.buffer(15).bounds(); }).select(['ID','remapped']),
+  fileFormat: 'KMZ',
+  description: 'Samples_EM_set1',
+});
+
+Export.table.toDrive({
+  collection: set2.map(function(f){ return f.buffer(15).bounds(); }).select(['ID','remapped']),
+  fileFormat: 'KMZ',
+  description: 'Samples_EM_set2',
+});
+
+// ==============================================================================
+// 4. REGIONAL LANDSAT REFERENCE EXTRACTION
+// ==============================================================================
+
+// Function to mask cloudy, shadowy and low quality pixels + calculate NDVI
+function ProcessLandsat(img) {
+  var qa = img.select('QA_PIXEL');
+  var saturation = img.select("QA_RADSAT").eq(0);
+  
+  var bitwiseMask = ee.Image(0)
+    .or(qa.bitwiseAnd(1 << 0)).or(qa.bitwiseAnd(1 << 1)).or(qa.bitwiseAnd(1 << 2))
+    .or(qa.bitwiseAnd(1 << 3)).or(qa.bitwiseAnd(1 << 4)).or(qa.bitwiseAnd(1 << 5))
+    .or(qa.bitwiseAnd(1 << 9).and(qa.bitwiseAnd(1 << 10))) 
+    .or(qa.bitwiseAnd(1 << 8).and(qa.bitwiseAnd(1 << 11)))
+    .or(qa.bitwiseAnd(1 << 9).and(qa.bitwiseAnd(1 << 11))).not();
+    
+  var scaledBands = img.select("SR_B.").multiply(0.0000275).add(-0.2);
+  var cleanImg = scaledBands.updateMask(bitwiseMask.and(saturation));
+  
+  var ndvi = cleanImg.normalizedDifference(["SR_B4", "SR_B3"]).rename("ndvi").float(); // NIR, RED
+  
+  return ndvi.set({
+    "system:time_start": img.get("system:time_start")
+  });
+}
+
+// Get all Landsat collections into one merged regional collection
+function GetRegionalLandsat() {
+  function filterCollection(collection) {
+    return collection
+      .filterBounds(boundary) // Filter by region rather than path/row
+      .filter(ee.Filter.calendarRange(6, 7, 'month')) // Summer months only
+      .filter(ee.Filter.lt('CLOUD_COVER', 75));
+  }
+
+  var l4 = filterCollection(ee.ImageCollection('LANDSAT/LT04/C02/T1_L2'));
+  var l5 = filterCollection(ee.ImageCollection('LANDSAT/LT05/C02/T1_L2'));
+  var l7 = filterCollection(ee.ImageCollection('LANDSAT/LE07/C02/T1_L2').filter(ee.Filter.calendarRange(1999, 2017, 'year')));
+  var l8 = filterCollection(ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')).select(['SR_B4','SR_B5','QA_PIXEL','QA_RADSAT'], ['SR_B3','SR_B4','QA_PIXEL','QA_RADSAT']);
+  var l9 = filterCollection(ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')).select(['SR_B4','SR_B5','QA_PIXEL','QA_RADSAT'], ['SR_B3','SR_B4','QA_PIXEL','QA_RADSAT']);
+
+  return ee.ImageCollection(l9.merge(l8).merge(l7).merge(l4).merge(l5)).map(ProcessLandsat);
+}
+
+// Build the global reference collection
+var Collection = GetRegionalLandsat();
+
+// Iterate through years to extract the 95th Percentile NDVI at each point
+var extractValues = function(year, FC) {
+  var testImage = Collection.filter(ee.Filter.calendarRange(year, year, 'year'))
+                            .reduce(ee.Reducer.percentile([95]))
+                            .add(0.01) // Offset applied in original script
+                            .rename('ndvi');
+                            
+  var FC2 = ee.FeatureCollection(FC).map(function(testPoint){
+    var tt = testImage.reduceRegion(ee.Reducer.first(), testPoint.geometry(), 30);
+    return testPoint.set(year, ee.Number(tt.get('ndvi')));
+  });
+  return FC2; 
+};
+
+// Run the iterative extraction
+var result = ee.FeatureCollection(ee.List(years).iterate(extractValues, samples));
+print('Extracted Timeseries:', result);
+Map.addLayer(result, {}, 'Sample Points with NDVI Timeseries');
+
+// ==============================================================================
+// 5. SPLIT AND EXPORT RESULTS
+// ==============================================================================
+
+var resultset3 = result.filterBounds(Turkey);
+var resultrest = result.filterBounds(other).randomColumn();
+var resultset1 = resultrest.filter(ee.Filter.lte('random', 0.6));
+var resultset2 = resultrest.filter(ee.Filter.gte('random', 0.328));
+
+// 5A. Re-Export KMZs with the generated IDs for mapping reference
+Export.table.toDrive({
+  collection: resultset1.map(function(f){ return f.buffer(15).bounds(); }).select(['ID','remapped']),
+  fileFormat: 'KMZ',
+  description: 'Samples_EM_set1_updated',
+});
+Export.table.toDrive({
+  collection: resultset2.map(function(f){ return f.buffer(15).bounds(); }).select(['ID','remapped']),
+  fileFormat: 'KMZ',
+  description: 'Samples_EM_set2_updated',
+});
+
+// 5B. Export Data CSVs containing the full 24-year NDVI timeseries
+Export.table.toDrive({
+  collection: resultset3,
+  fileFormat: 'CSV',
+  description: 'Reference_set3',
+});
+
+Export.table.toDrive({
+  collection: resultset2,
+  fileFormat: 'CSV',
+  description: 'Reference_set2',
+});
+
+Export.table.toDrive({
+  collection: resultset1,
+  fileFormat: 'CSV',
+  description: 'Reference_set1',
+});
