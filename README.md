@@ -8,7 +8,15 @@
 
 <!-- Paste manuscript abstract here -->
 
-*Abstract placeholder — to be updated upon manuscript publication.*
+*Abstract  — to be updated upon manuscript publication.*
+IrrEM (Irrigation in the eastern Mediterranean): Two and a half decades of seasonal high-resolution irrigated land maps of the eastern Mediterranean
+Esmaeel Adrah1, Luca Brocca2, Emine Senkardesler3, He Yin1
+1Department of Geography, Kent State University, Kent, OH 44240, USA
+2Research Institute for Geo-Hydrological Protection, National Research Council, Perugia, Italy
+3Department of Informatics, University of Illinois Urbana-Champaign, Champaign, IL, US
+
+Correspondence to: Esmaeel Adrah (eadrah@kent.edu | esmaeelad@gmail.com)
+Abstract. Irrigation promotes food security, economic growth, and drought resilience, but strains water resources and the environment. The eastern Mediterranean is one of the water-stressed regions that relies heavily on agriculture. Nevertheless, long-term irrigation patterns and their response to the regional challenges, such as frequent droughts and a war-torn agricultural system, remain poorly studied due to limited data. NASA’s satellite archive and recent remote sensing advancements offer an opportunity to fill this gap and support informed decision-making; however, adapting these tools to data-scarce regions and varying conditions remains a challenge. In this study, we present IrrEM (Irrigation in the eastern Mediterranean), which leverages a technique less reliant on training data, the long-standing Landsat archive, and cloud computing to map annual dry-season irrigation extent at 30-m spatial resolution for the last 25 years in the eastern Mediterranean. To map irrigation extent without relying on training data, we processed each Landsat image into relative soil moisture using the Optical Trapezoid Model (OPTRAM). Next, we derived two irrigation indicators by tracking the artificial change of relative soil moisture over time and space to delineate irrigation extent. The final maps yielded an overall accuracy that ranged from 0.67 to 0.87, and the irrigated land extent F score ranged from 0.59 to 0.91 when evaluated using reference data. Our study describes the technical procedures carried out to produce and evaluate these maps and presents the final maps and codes in open-access format alongside a brief outlook of possible applications. Therefore, our study offers timely, long-term, high-resolution irrigation maps for the eastern Mediterranean, freely available to support informed decisions, policy design, international aid, and further research in climate, agronomy, hydrology, and human-environment interaction. 
 
 ---
 
@@ -18,8 +26,8 @@
 |---|---|
 | **Manuscript DOI** | `https://doi.org/XXXX/XXXXXXXXX` *(placeholder)* |
 | **Dataset on Zenodo** | `https://doi.org/10.5281/zenodo.XXXXXXX` *(placeholder)* |
-| **Irrigation Explorer App (GEE)** | `https://code.earthengine.google.com/XXXXXXXXXXXXXXXX` *(placeholder)* |
-| **Earth Engine Code Repository** | `https://code.earthengine.google.com/?accept_repo=XXXXXXXXXXXXXXXX` *(placeholder)* |
+| **Irrigation Explorer App (GEE)** | `https://water-middleeast.projects.earthengine.app/view/irrem` |
+| **Earth Engine Code Repository** | `https://code.earthengine.google.com/?accept_repo=users/Esmaeel-ad/IrrEM` |
 
 ---
 
@@ -203,6 +211,10 @@ Dataset:
 > DOI: `https://doi.org/10.5281/zenodo.XXXXXXX` *(placeholder)*
 
 ---
+## Acknowledgments
+We gratefully acknowledge and thank Jackson Miller and Oliver Richard from Kent State University for assisting with reference data collection. This publication was made possible in part by support from NASA New (Early Career) Investigator Program grant. This publication was made possible in part by support from the Kent State University Open Access Publishing and partial support from Water Diplomacy Centre and Swiss Agency for Development and Cooperation. 
+
+---
 
 ## License
 
@@ -213,5 +225,5 @@ This code is released under the [MIT License](LICENSE). The associated dataset l
 ## Contact
 
 **Esmaeel Adrah** — SenslandLab, Kent State University  
-esmaeelad@gmail.com  
+esmaeelad@gmail.com  | eadrah@kent.edu
 GitHub: [@Esmaeel-A](https://github.com/Esmaeel-A)
