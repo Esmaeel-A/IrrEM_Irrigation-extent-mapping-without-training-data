@@ -1,0 +1,91 @@
+//######################################################################################
+// #### Kent State University - SenslandLab - 2026 ####
+// ### Esmaeel Adrah (eadrah@kent.edu) esmaeelad@gmail.com ###
+// ==============================================================================
+// ======================== RESPONSE DESIGN DOCUMENTATION =======================
+// ==============================================================================
+// Description: This file is a documentation script for the manual reference data
+// labeling protocol. It contains the Standard Operating Procedure (SOP) for 
+// assigning irrigation labels using Google Earth Pro Historical Imagery and 
+// extracted Landsat NDVI values.
+//
+// NOTE: This file contains no executable code. It is for documentation only.
+// ==============================================================================
+
+// ------------------------------------------------------------------------------
+// STEP-BY-STEP CLASSIFICATION PROCEDURE
+// ------------------------------------------------------------------------------
+
+// 1. NAVIGATE TO THE LOCATION
+//    - Open the provided KMZ file in Google Earth Pro.
+//    - Double-click on a polygon in the 'Places' sidebar to check its ID and 
+//      navigate automatically to its location.
+
+// 2. CONFIRM AGRICULTURAL LAND USE
+//    - Confirm if the polygon is on agricultural land. 
+//    - If it is agricultural land, move to Step 3. 
+//    - Otherwise, assign it one of the following values in the Excel sheet and move on:
+//        >>> 0 : Not agricultural land (e.g., urban, bare soil, desert).
+//        >>> 5 : Overlapping (Only 30% or less of the polygon area overlaps 
+//                agricultural land; the rest is infrastructure/buildings).
+//        >>> 6 : Trees (Forest or tree crops/orchards).
+
+// 3. ESTABLISH TEMPORAL CONTEXT
+//    - Click the 'Historical Imagery' clock icon in the top toolbar.
+//    - Make sure it is on the year of interest (start with the most recent year).
+//    - Pay close attention to which month you are looking at.
+
+// 4. EVALUATE SPATIAL CONTEXT & FORM A HYPOTHESIS
+//    - Check the polygon location within the agricultural field.
+//    - Check the surrounding fields.
+//    - Look for the existence of irrigation infrastructure and the location's 
+//      proximity to it.
+
+// 5. MAKE AN EDUCATED GUESS
+//    Make an educated guess based on:
+//    a. The location information above (proximity to irrigation infrastructure, 
+//       texture contrast among neighboring fields).
+//    b. Water reservoirs (See 'Clues' section below).
+//    c. The greenness in the year and month appearing in the Very High Resolution (VHR) 
+//       satellite images. (Sometimes more than one image is available per year; 
+//       check all photos from different months).
+//    d. The level of management (tillage/plowing), planting patterns, and texture 
+//       you can observe in the VHR imagery.
+//
+//    WHAT TO LOOK FOR:
+//    - High greenness in Summer >> Highly likely irrigated.
+//    - High greenness in Winter/Spring, but not in Summer >> Likely rainfed 
+//      (Check other clues to verify).
+
+// 6. CONFIRM YOUR GUESS AND ASSIGN A VALUE
+//    - Check the corresponding ID in the Excel sheet and locate the polygon/year. 
+//    - Check the NDVI value provided in the Excel sheet to confirm your decision. 
+//      (This is the 95th percentile NDVI for June-July of that year).
+//    - Once you make a decision, OVERWRITE the NDVI value using one of the following:
+//        >>> 1 : Rainfed
+//        >>> 2 : Irrigated, but not completely sure (Low Confidence)
+//        >>> 3 : Irrigated (High Confidence)
+//        >>> 4 : I can't tell (VHR is poor, cloudy, or ambiguous)
+//        >>> 0, 5, 6 : (See non-agricultural codes in Step 2)
+
+// 7. CHECK PREVIOUS YEARS
+//    - Move the history bar in Google Earth to the previous available year 
+//      and repeat from Step 4.
+
+// 8. SKIP UNAVAILABLE YEARS
+//    - Skip the years where VHR is unavailable. 
+//    - Once all years with VHR images for the current ID are completed, 
+//      move to the next polygon.
+
+
+// ------------------------------------------------------------------------------
+// VISUAL CLUES & REFERENCE
+// ------------------------------------------------------------------------------
+
+// CLUE: WATER RESERVOIRS
+// When scanning the surrounding area, on-farm reservoirs are primary indicators 
+// of localized irrigation capability.
+
+// REFERENCE FIGURES (Refer to protocol document for images):
+// - Figure 1.a: Empty Water Reservoir
+// - Figure 1.b: Filled Water Reservoir (Coordinates: 36 01 27 N | 40 34 11 E | Feb 2021)
