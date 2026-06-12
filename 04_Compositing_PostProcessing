@@ -1,0 +1,164 @@
+//######################################################################################
+// #### Kent State University - SenslandLab - 2026 ####
+// ### Esmaeel Adrah (eadrah@kent.edu) esmaeelad@gmail.com ###
+// ==============================================================================
+// ========================== POST-PROCESSING SCRIPT ============================
+// ==============================================================================
+// Description: This script serves as the primary compositing engine for the 
+// regional analysis. It ingests the individual 16-bit packed footprint 
+// collections generated in the previous step and stitches them into a continuous, 
+// seamless regional map. During this process, it unpacks the seasonal data, 
+// applies spatial smoothing (majority filter on small patches to remove noise), 
+// and calculates combined Supplemental (Supp) irrigation maps. Finally, it 
+// exports the composited and refined seasonal maps.
+// ==============================================================================
+
+// ------------------------------------------------------------------------------
+// 1. GLOBAL VARIABLES & INPUTS
+// ------------------------------------------------------------------------------
+// choose wich season to export Summer or Supplementray irrigaiton 
+// Options: 'Supp' Or 'Summ'
+var season = 'Summ';
+
+var years = ee.List.sequence(2000, 2025).getInfo();
+
+var soilMoisturePalette = ['brown', 'orange', 'yellow', 'green', 'blue'];
+var vis = {min: 0, max: 1, palette: soilMoisturePalette};
+
+// Define your region of interest for export
+// var geometry = ee.Geometry.Polygon(...); 
+
+// Load the ImageCollection containing your packed 16-bit Step 3 outputs
+var Irr_extent = ee.ImageCollection('projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/Irr_ExtentCollection');
+
+// ------------------------------------------------------------------------------
+// 2. DEFINE HELPER MASKS
+// ------------------------------------------------------------------------------
+// Slope Mask (< 5 degrees)
+var slope = ee.Terrain.slope(ee.Image('USGS/SRTMGL1_003').select('elevation'));
+var slopeMask = slope.lt(5);
+
+// ESA WorldCover Mask (Exclude Urban, Water, Trees, Bare)
+var WC_ESA = ee.ImageCollection("ESA/WorldCover/v100").first(); 
+var NotMask = WC_ESA.neq(50).and(WC_ESA.neq(80)).and(WC_ESA.neq(10)).and(WC_ESA.neq(60)); 
+
+// ==============================================================================
+// 3. UNPACKING AND QUALITY MOSAIC PIPELINE
+// ==============================================================================
+
+var IrrCollection = ee.ImageCollection(years.map(function(year) {
+  
+  // Internal function to unpack the 16-bit bands for the specific year
+  function unpackYearlyData(packedImage) {
+    // ----------------------------------------------------------------------------
+    // 1. RECOVER SUMMER (Bits 0-4 | Shift: 0 | Mask: 31)
+    // ----------------------------------------------------------------------------
+    var summerRaw = packedImage.bitwiseAnd(31).subtract(1);
+    var summerClean = summerRaw.updateMask(summerRaw.gte(0)).select('Pack_Ir' + year).rename('Summ_Ir' + year);
+    var summerValid = summerRaw.updateMask(summerRaw.gte(0)).select('Pack_V' + year).rename('Summ_V' + year).unmask();
+    
+    // ----------------------------------------------------------------------------
+    // 2. RECOVER SUP 2 (Bits 5-8 | Shift: 5 | Mask: 15)
+    // ----------------------------------------------------------------------------
+    var sup2Raw = packedImage.rightShift(5).bitwiseAnd(15).subtract(1);
+    var sup2Clean = sup2Raw.updateMask(sup2Raw.gte(0)).select('Pack_Ir' + year).rename('Sup2_Ir' + year);
+    var sup2Valid = sup2Raw.updateMask(sup2Raw.gte(0)).select('Pack_V' + year).rename('Sup2_V' + year).unmask();
+    
+    // ----------------------------------------------------------------------------
+    // 3. RECOVER SUP 1 (Bits 9-12 | Shift: 9 | Mask: 15)
+    // ----------------------------------------------------------------------------
+    var sup1Raw = packedImage.rightShift(9).bitwiseAnd(15).subtract(1);
+    var sup1Clean = sup1Raw.updateMask(sup1Raw.gte(0)).select('Pack_Ir' + year).rename('Sup1_Ir' + year);
+    var sup1Valid = sup1Raw.updateMask(sup1Raw.gte(0)).select('Pack_V' + year).rename('Sup1_V' + year).unmask();
+    
+    // Combine them back into a clean, physical 6-band image
+    return ee.Image.cat([summerClean, sup2Clean, sup1Clean, summerValid, sup2Valid, sup1Valid]);
+  }
+
+  // Unpack images for the specific year
+  var Irr_year = Irr_extent.filter(ee.Filter.eq('year', year)).map(unpackYearlyData);
+  
+  // Use Quality Mosaic to combine overlapping footprints based on max valid observations
+  var Irr_Sum_year = Irr_year.select(['Summ_V' + year, 'Summ_Ir' + year]).qualityMosaic('Summ_V' + year);
+  var Irr_Sup1_year = Irr_year.select(['Sup1_V' + year, 'Sup1_Ir' + year]).qualityMosaic('Sup1_V' + year);
+  var Irr_Sup2_year = Irr_year.select(['Sup2_V' + year, 'Sup2_Ir' + year]).qualityMosaic('Sup2_V' + year);
+  
+  var Irr_Extent = ee.Image.cat([Irr_Sum_year, Irr_Sup1_year, Irr_Sup2_year]);
+
+  return Irr_Extent.set('year', year);
+}));
+
+// ==============================================================================
+// 4. SPATIAL SMOOTHING & SUPPLEMENTAL CALCULATION
+// ==============================================================================
+
+var CompositeCollection = IrrCollection.map(function(img) {
+  // Apply terrain and landcover masks
+  var Irr = img.updateMask(slopeMask).updateMask(NotMask).unmask();
+  
+  // Strip the year from the band names for standard processing
+  Irr = Irr.rename(Irr.bandNames().map(function(name) {
+    return ee.String(name).slice(0, -4);
+  }));
+
+  // Define Validation bands and combine Sup1 & Sup2
+  var valid = Irr.select(['Summ_V', 'Sup1_V', 'Sup2_V'])
+    .addBands(Irr.select('Sup1_V').add(Irr.select('Sup2_V')).rename('Supp_V'));
+    
+  // Define Event Count bands and combine Sup1 & Sup2
+  var Irr_Count = Irr.select(['Summ_Ir', 'Sup1_Ir', 'Sup2_Ir'], ['Summ_CIr', 'Sup1_CIr', 'Sup2_CIr'])
+    .addBands(Irr.select('Sup1_Ir').add(Irr.select('Sup2_Ir')).rename('Supp_CIr'));
+    
+  // Binarize extent (Irrigated >= 1 event)
+  var Irr_Extent = Irr.select(['Summ_Ir', 'Sup1_Ir', 'Sup2_Ir']).gte(1);
+  Irr_Extent = ee.Image.cat([Irr_Extent, Irr_Extent.select('Sup1_Ir').where(Irr_Extent.select('Sup1_Ir'), 1).rename('Supp_Ir')]);
+  
+  // Filter out salt-and-pepper noise using connected pixel count
+  var patchsize = Irr_Extent.connectedPixelCount(80, true);
+
+  // Run a majority filter
+  var filtered = Irr_Extent.focal_mode({
+    radius: 90,
+    kernelType: 'square',
+    units: 'meters',
+  }); 
+  
+  // Update image with majority filter ONLY where patch size is small (<50 pixels)
+  var connectedClassified = Irr_Extent.where(patchsize.lt(50), filtered)
+    .addBands(valid)
+    .addBands(Irr_Count);
+
+  return connectedClassified.copyProperties(img, img.propertyNames());
+});
+
+// ==============================================================================
+// 5. VISUALIZATION & CONSOLE CHECKS
+// ==============================================================================
+
+print('Composite Collection:', CompositeCollection);
+
+Map.addLayer(CompositeCollection.select('Summ_Ir'), vis, 'CompositeCollection Extent', false);
+Map.addLayer(CompositeCollection.select('Summ_CIr'), vis, 'CompositeCollection Count', false);
+Map.addLayer(CompositeCollection.select('Summ_V'), vis, 'CompositeCollection Valid Obs', false);
+
+// ==============================================================================
+// 6. EXPORT
+// ==============================================================================
+
+for (var i = 0; i < years.length; i++) {
+  var year = years[i];
+  
+  // Filter down to the specific year and select the combined Supplemental bands
+  var yearImg = CompositeCollection.filter(ee.Filter.eq('year', year))
+    .first()
+    .select([season+'_Ir', season+'_CIr', season+'_V']); 
+
+  Export.image.toAsset({
+    image: yearImg,
+    // region: geometry, // Ensure geometry is defined at the top of the script!
+    scale: 30,
+    description: 'Ir_'+season+'_' + year,
+    assetId: 'projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/Final/Ir_'+season+'/Ir_'+season+'_' + year,
+    maxPixels: 1e13,
+  });
+}
