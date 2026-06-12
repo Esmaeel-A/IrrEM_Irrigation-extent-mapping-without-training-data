@@ -79,7 +79,7 @@ Step 6 — Public Visualization
     Interactive GEE web app: country/province filters, area charts,
     split-map comparison, 25-year time-series of irrigation extent
 ```
-<img width="2395" height="2156" alt="Method" src="https://github.com/user-attachments/assets/3a474a1b-e517-4ad9-92f6-fa7b4a7c1054" />
+<img width="2395" height="2156" alt="Method_N" src="https://github.com/user-attachments/assets/4ea01df3-5ea4-43ba-9241-5a33ecdeade4" />
 
 ---
 
