@@ -180,8 +180,7 @@ Interactive GEE web application for exploring the 25-year irrigation extent data
 |---|---|---|
 | Landsat 4/5/7/8/9 C2 L2 | USGS via GEE | Primary reflectance imagery |
 | CHIRPS Daily Precipitation | UCSB/CHC | Rainfall masking |
-| NASA SMAP SPL3SMP_E | NASA NSIDC via GEE | Soil moisture validation |
-| SRTM DEM | USGS via GEE | Slope mask (exclude >5°) |
+| NASA SMAP SPL3SMP | NASA NSIDC via GEE | Soil moisture validation |
 | ESA WorldCover v100 | ESA via GEE | Crop/urban/water masks |
 | Country/Province Boundaries | — | Spatial stratification |
 
