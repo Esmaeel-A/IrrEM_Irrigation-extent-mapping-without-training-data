@@ -1,13 +1,11 @@
-
 /**
  * APP: Seasonal Irrigation Area Change Explorer
 //######################################################################################
 //#### Kent State University - SenslandLab - 2026 ####
 //### Esmaeel Adrah eadrah@kent.edu esmaeelad@gmail.com ###
 //######################################################################################
-
-
  */
+ 
 var newNames = ['Ir2000','Ir2001','Ir2002','Ir2003','Ir2004','Ir2005','Ir2006','Ir2007','Ir2008','Ir2009','Ir2010','Ir2011','Ir2012','Ir2013','Ir2014','Ir2015','Ir2016','Ir2017','Ir2018','Ir2019','Ir2020','Ir2021','Ir2022','Ir2023','Ir2024','Ir2025']
 
 var scaleOfchoice = 500
@@ -44,7 +42,7 @@ var areaCol = ee.ImageCollection.fromImages(
       .multiply(ee.Image.pixelArea()).divide(1e6).rename('Off_Season');
       
     // var rainArea = rainfedImage.select([bandName])
-    //   .multiply(ee.Image.pixelArea()).divide(1e6).rename('Rainfed');
+    //    .multiply(ee.Image.pixelArea()).divide(1e6).rename('Rainfed');
       
     return inArea.addBands(offArea)//.addBands(rainArea)
       .set('system:time_start', ee.Date.fromYMD(y, 1, 1).millis());
@@ -63,8 +61,33 @@ var title = ui.Label('Eastern Mediteranean Irrigation Area Explorer', {
 });
 
 var subTitle = ui.Label('Compare In-Season, Off-Season irrigated areas ', {
-  color: 'gray', margin: '0 0 20px 0'
+  color: 'gray', margin: '0 0 15px 0'
 });
+
+// --- Manuscript Info (Collapsible Panel) ---
+var manuscriptTitle = 'IrrEM (Irrigation in the eastern Mediterranean): Two and a half decades of seasonal high-resolution irrigated land maps of the eastern Mediterranean';
+var authorInfo = ' Esmaeel Adrah (eadrah@kent.edu | esmaeelad@gmail.com), Luca Brocca, Emine Senkardesler, He Yin';
+var abstractText = 'Abstract. Irrigation promotes food security, economic growth, and drought resilience, but strains water resources and the environment. The eastern Mediterranean is one of the water-stressed regions that relies heavily on agriculture. Nevertheless, long-term irrigation patterns and their response to the regional challenges, such as frequent droughts and a war-torn agricultural system, remain poorly studied due to limited data. NASA’s satellite archive and recent remote sensing advancements offer an opportunity to fill this gap and support informed decision-making; however, adapting these tools to data-scarce regions and varying conditions remains a challenge. In this study, we present IrrEM (Irrigation in the eastern Mediterranean), which leverages a technique less reliant on training data, the long-standing Landsat archive, and cloud computing to map annual dry-season irrigation extent at 30-m spatial resolution for the last 25 years in the eastern Mediterranean. To map irrigation extent without relying on training data, we processed each Landsat image into relative soil moisture using the Optical Trapezoid Model (OPTRAM). Next, we derived two irrigation indicators by tracking the artificial change of relative soil moisture over time and space to delineate irrigation extent. The final maps yielded an overall accuracy that ranged from 0.67 to 0.87, and the irrigated land extent F score ranged from 0.59 to 0.91 when evaluated using reference data. Our study describes the technical procedures carried out to produce and evaluate these maps and presents the final maps and codes in open-access format alongside a brief outlook of possible applications. Therefore, our study offers timely, long-term, high-resolution irrigation maps for the eastern Mediterranean, freely available to support informed decisions, policy design, international aid, and further research in climate, agronomy, hydrology, and human-environment interaction.';
+
+var aboutPanel = ui.Panel({
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {shown: false, margin: '5px 0 15px 0', padding: '10px', backgroundColor: '#f8f9fa', border: '1px solid #ddd'}
+});
+
+aboutPanel.add(ui.Label(manuscriptTitle, {fontWeight: 'bold', fontSize: '13px', color: '#2c3e50'}));
+aboutPanel.add(ui.Label(authorInfo, {fontSize: '12px', color: '#7f8c8d', fontStyle: 'italic', margin: '4px 0'}));
+aboutPanel.add(ui.Label(abstractText, {fontSize: '11px', color: '#333', margin: '8px 0 0 0'}));
+
+var toggleButton = ui.Button({
+  label: '📖 About this Study & Manuscript',
+  onClick: function() {
+    var isShown = aboutPanel.style().get('shown');
+    aboutPanel.style().set('shown', !isShown);
+    toggleButton.setLabel(isShown ? '📖 About this Study & Manuscript' : '📖 Hide Info');
+  },
+  style: {margin: '0 0 15px 0'}
+});
+// -------------------------------------------
 
 var countrySelect = ui.Select({
   placeholder: 'Loading countries...', style: {width: '100%'}
@@ -109,6 +132,8 @@ ui.root.add(splitMap); // Add split panel instead of a single map
 
 mainPanel.add(title)
          .add(subTitle)
+         .add(toggleButton) // Add the toggle button
+         .add(aboutPanel)   // Add the hidden info panel
          .add(ui.Label('1. Select Country:', {fontWeight: 'bold'}))
          .add(countrySelect)
          .add(ui.Label('2. Select Province:', {fontWeight: 'bold'}))
