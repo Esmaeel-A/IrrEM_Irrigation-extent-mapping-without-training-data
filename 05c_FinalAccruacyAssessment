@@ -1,0 +1,109 @@
+//######################################################################################
+// #### Kent State University - SenslandLab - 2026 ####
+// ### Esmaeel Adrah (eadrah@kent.edu) esmaeelad@gmail.com###
+// ==============================================================================
+// ======================== ACCURACY ASSESSMENT SCRIPT ==========================
+// ==============================================================================
+// Description: Quality control step. Calculates the accuracy assessment for the 
+// dry season irrigation extent for each year. Loads pre-processed asset collections
+// (Raw or Temporally Smoothed) and evaluates them against the manual reference points.
+// Outputs: Overall Accuracy, F-score, User's Accuracy, and Producer's Accuracy.
+// ==============================================================================
+
+// ------------------------------------------------------------------------------
+// 1. GLOBAL VARIABLES & EXECUTION TOGGLES
+// ------------------------------------------------------------------------------
+
+// --- ACCURACY TOGGLES ---
+var USE_SMOOTHED_DATA      = true;  // TRUE = Evaluate Temporally Smoothed | FALSE = Evaluate Raw Extent
+var INCLUDE_LOW_CONFIDENCE = false; // TRUE = Include 'Not Sure' (2) labels | FALSE = Exclude 'Not Sure'
+
+var years = [2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 
+             2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024];
+
+var soilMoisturePalette = ['brown', 'orange', 'yellow', 'green', 'blue'];
+var vis = {min: 0, max: 1, palette: soilMoisturePalette};
+
+// ------------------------------------------------------------------------------
+// 2. LOAD COLLECTIONS
+// ------------------------------------------------------------------------------
+
+var RawExtent = ee.ImageCollection('projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/Final/Ir_Summ');
+var TemporallySmoothed = ee.ImageCollection('projects/ee-hyinhe/assets/Esmaeel/Irrigation_EM/Final/Ir_Summ_Wsmooth').select('Summ_Ir');
+
+// Choose which collection to process based on the toggle above
+var processedImage = USE_SMOOTHED_DATA ? TemporallySmoothed.select('Summ_Ir') : RawExtent.select('Summ_Ir');
+
+// ------------------------------------------------------------------------------
+// 3. ACCURACY CALCULATION FUNCTION
+// ------------------------------------------------------------------------------
+
+function calcAccuracy(year) {
+  var yrStr = year.toString();
+  var yearlyImage = processedImage.filter(ee.Filter.eq('year', year)).first().rename('class');
+      
+  print('=============================================');
+  print('Processing Accuracy for Year:', year);
+  
+  Map.addLayer(yearlyImage, {palette: soilMoisturePalette}, 'yearlyImage_' + year, false);
+      
+  // 3A. Load Reference Data
+  var TData = ee.FeatureCollection('projects/water-middleeast/assets/reference_IrrEM');
+
+  // Format Rainfed (Label 1 -> 0)
+  var Rainfed = TData.filter(ee.Filter.eq(yrStr, 1)).map(function(g){
+    return g.set(yrStr, 0);
+  });
+  Map.addLayer(Rainfed, {color: 'red'}, 'Rainfed', false);
+
+  // Format Irrigated High Confidence (Label 3 -> 1)
+  var Irrigated = TData.filter(ee.Filter.eq(yrStr, 3)).map(function(g){
+    return g.set(yrStr, 1);
+  });
+  Map.addLayer(Irrigated, {color: 'blue'}, 'Irrigated', false);
+
+  // Format Irrigated Low Confidence (Label 2 -> 1)
+  var IrrigatedNotSure = TData.filter(ee.Filter.eq(yrStr, 2)).map(function(g){
+    return g.set(yrStr, 1);
+  });
+  Map.addLayer(IrrigatedNotSure, {color: 'green'}, 'IrrigatedNotSure', false);
+
+  // 3B. Merge Data based on execution toggle
+  var validationD = Rainfed.merge(Irrigated);
+  
+  if (INCLUDE_LOW_CONFIDENCE) {
+    validationD = validationD.merge(IrrigatedNotSure);
+  }
+
+  print('Label Histogram for Year ' + year + ' (0=Rainfed, 1=Irrigated):', validationD.aggregate_histogram(yrStr));
+
+  // ------------------------------------------------------------------------------
+  // 4. ACCURACY ASSESSMENT EXECUTION
+  // ------------------------------------------------------------------------------
+
+  // Sample the validation data against the classification result
+  var validation = yearlyImage.sampleRegions({
+    collection: validationD,
+    properties: [yrStr],
+    scale: 30,
+  });
+
+  // Compare validation (truth) and the classification result
+  var ErrorMatrix = validation.errorMatrix(yrStr, 'class');
+
+  // Get and print the accuracy statistics
+  var OverAllAccuracy = ErrorMatrix.accuracy();
+  print('Overall Accuracy:', OverAllAccuracy);
+
+  var fscore = ErrorMatrix.fscore();
+  print('Validation F-Score:', fscore);
+
+  print('Consumers Accuracy (User):', ErrorMatrix.consumersAccuracy());
+  print('Producers Accuracy:', ErrorMatrix.producersAccuracy());
+}
+
+// ==============================================================================
+// 5. RUN PIPELINE
+// ==============================================================================
+
+years.map(calcAccuracy);
