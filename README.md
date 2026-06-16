@@ -212,7 +212,7 @@ Dataset:
 
 ---
 ## Acknowledgments
-We gratefully acknowledge and thank Jackson Miller and Oliver Richard from Kent State University for assisting with reference data collection. This publication was made possible in part by support from NASA New (Early Career) Investigator Program grant. This publication was made possible in part by support from the Kent State University Open Access Publishing and partial support from Water Diplomacy Centre and Swiss Agency for Development and Cooperation. 
+We gratefully acknowledge and thank Jackson Miller and Oliver Richard from Kent State University for assisting with reference data collection. This work was supported by NASA New (Early Career) Investigator Program grant 80NSSC21K0937 and the Water Diplomacy Center (WDC) Fellowship at Jordan University of Science and Technology (JUST), including partial support for journal publication fees. This publication was made possible in part by support from the Kent State University Open Access Publishing. 
 
 ---
 
