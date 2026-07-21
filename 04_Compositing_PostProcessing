@@ -111,7 +111,7 @@ var CompositeCollection = IrrCollection.map(function(img) {
     
   // Binarize extent (Irrigated >= 1 event)
   var Irr_Extent = Irr.select(['Summ_Ir', 'Sup1_Ir', 'Sup2_Ir']).gte(1);
-  Irr_Extent = ee.Image.cat([Irr_Extent, Irr_Extent.select('Sup1_Ir').where(Irr_Extent.select('Sup1_Ir'), 1).rename('Supp_Ir')]);
+  Irr_Extent = ee.Image.cat([Irr_Extent, Irr_Extent.select('Sup1_Ir').where(Irr_Extent.select('Sup2_Ir'), 1).rename('Supp_Ir')]);
   
   // Filter out salt-and-pepper noise using connected pixel count
   var patchsize = Irr_Extent.connectedPixelCount(80, true);
