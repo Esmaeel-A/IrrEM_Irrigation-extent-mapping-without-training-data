@@ -24,7 +24,6 @@ Irrigation supports food security, drought resilience, and economic growth, but 
 | Resource | Link |
 |---|---|
 | **Manuscript DOI** | `https://doi.org/XXXX/XXXXXXXXX` *(placeholder)* |
-| **Dataset on Zenodo (temporary link)** | `https://zenodo.org/records/17574601?preview=1` |
 | **Dataset on Zenodo (reserved link)** | `https://doi.org/10.5281/zenodo.17574601` |
 | **Irrigation Explorer App (GEE)** | `https://water-middleeast.projects.earthengine.app/view/irrem` |
 | **Earth Engine Code Repository** | `https://code.earthengine.google.com/?accept_repo=users/Esmaeel-ad/IrrEM` |
