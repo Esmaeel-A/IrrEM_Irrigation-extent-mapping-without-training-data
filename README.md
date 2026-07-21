@@ -15,7 +15,7 @@ Esmaeel Adrah, Luca Brocca, Emine Senkardesler, He Yin
 
 *Abstract*
 
-Irrigation promotes food security, economic growth, and drought resilience, but strains water resources and the environment. The eastern Mediterranean is a water-stressed region that relies heavily on agriculture. Nevertheless, long-term irrigation patterns and their response to the regional challenges, such as frequent droughts and a war-torn agricultural system, remain poorly studied due to limited long-term data. NASA’s satellite archive and recent remote sensing advancements offer an opportunity to fill this gap and support informed decision-making; however, adapting these tools to data-scarce regions and varying conditions remains a challenge. In this study, we present IrrEM (Irrigation in the eastern Mediterranean), which leverages a technique less reliant on training data, the long-standing Landsat archive, and cloud computing to map summer and winter (supplemental) irrigation extent at 30-m spatial resolution for the last 26 years in the eastern Mediterranean. We first processed each Landsat image into relative soil moisture using the Optical Trapezoid Model (OPTRAM). Next, we derived spatial and temporal irrigation indicators by tracking irrigation-induced changes of relative soil moisture across time and space, then used them to delineate irrigation extent. Evaluated against independent reference data, the maps achieved F scores ranging from 0.67 to 0.85. Our study documents the procedures used to produce and evaluate these maps. The open-access release comprises the annual summer and winter irrigation maps, ancillary layers (per-season counts of valid satellite observations and detected irrigation events), the OPTRAM parameters, the labeled reference data, the processing code, and an interactive web viewer (DOI: https://doi.org/10.5281/zenodo.17574601). Our study provides reproducible, timely, long-term, high-resolution irrigation maps for the eastern Mediterranean, freely available to support informed decisions, policy design, international aid, and further research in climate, agronomy, hydrology, and human-environment interaction.
+Irrigation supports food security, drought resilience, and economic growth, but strains water resources and the environment. The eastern Mediterranean is a water-stressed region that relies heavily on agriculture. However, long-term irrigation patterns and their response to the regional challenges, such as frequent droughts and a war-torn agricultural system, remain poorly studied. NASA’s satellite archive and recent remote sensing advancements offer an opportunity to fill this gap and support informed decision-making; however, adapting these tools to data-scarce regions and varying conditions remains a challenge. In this study, we present IrrEM (Irrigation in the eastern Mediterranean), which leverages the long-standing Landsat archive, a technique less reliant on training data, and cloud computing to map summer and winter irrigation extent at 30-m spatial resolution for the last 26 years in the eastern Mediterranean. We first processed each Landsat image into relative soil moisture using the Optical Trapezoid Model (OPTRAM). Next, we derived spatial and temporal irrigation indicators by tracking irrigation-induced changes of relative soil moisture across time and space, then used them to delineate irrigation extent. Evaluated against independent reference data, the maps achieved F-scores—the harmonic mean of precision and recall— ranging from 0.67 to 0.85. The open-access release comprises the annual summer and winter irrigation maps, ancillary layers (per-season counts of valid satellite observations and detected irrigation events), the OPTRAM parameters, the labelled reference data, the processing code, and an interactive web viewer (DOI: https://doi.org/10.5281/zenodo.17574601). Our study provides reproducible, timely, long-term, high-resolution irrigation maps for the eastern Mediterranean, freely available to support informed decisions, policy design, international aid, and further research in climate, agronomy, hydrology, and human-environment interaction.
 
 ---
 
@@ -56,7 +56,7 @@ Step 1 — OPTRAM Parameter Calibration
 
 Step 2 — Quality Control (SMAP Validation)
     OPTRAM-derived soil moisture vs. NASA SMAP SPL3SMP_E
-        → Temporal matching (±5 days)
+        → Temporal matching (5 days)
         → Pearson R and RMSE time-series per footprint
 
 Step 3 — Irrigation Event Detection (per Landsat footprint)
@@ -115,7 +115,7 @@ Computes the six OPTRAM parameters (`iw`, `id`, `sd`, `sw`, `vw`, `wv`) that def
 ---
 
 ### `02_QualityControl_ComparisonWithSMAP`
-Validates OPTRAM-derived soil moisture estimates against independent NASA SMAP (SPL3SMP_E) observations. For each overlapping Landsat–SMAP acquisition pair (within ±5 days), the script computes Pearson correlation and RMSE, with optional Winsorization for outlier robustness. Results are visualized as a time-series chart and exported as CSV.
+Validates OPTRAM-derived soil moisture estimates against independent NASA SMAP (SPL3SMP_E) observations. For each overlapping Landsat–SMAP acquisition pair (within 5 days), the script computes Pearson correlation and RMSE, with optional Winsorization for outlier robustness. Results are visualized as a time-series chart and exported as CSV.
 
 **Key inputs:** OPTRAM parameters (from Step 1), NASA SMAP SPL3SMP_E, CHIRPS precipitation  
 **Key outputs:** R and RMSE time-series charts and CSV
@@ -131,7 +131,7 @@ Core irrigation detection script for a **single** Landsat WRS footprint and year
 ---
 
 ### `03b_IrrigationMapping_Operational`
-Batch version of `03` that loops over a grid of Landsat WRS footprints (Paths 170–175, Rows 34–38) to process an entire region in one run. Adds cross-sensor harmonization (Landsat 7 → 8, Roy et al. 2018 coefficients) and support for pre-calculated OPTRAM parameters loaded from exported assets.
+Batch version of `03` that loops over a grid of Landsat WRS footprints (Paths 170–175, Rows 34–38) to process an entire region in one run. Adds support for pre-calculated OPTRAM parameters loaded from exported assets.
 
 **Key inputs:** Same as `03`, iterated over footprint grid  
 **Key outputs:** One 16-bit packed GEE asset per footprint × year
@@ -212,7 +212,7 @@ Dataset:
 
 ---
 ## Acknowledgments
-We gratefully acknowledge and thank Jackson Miller and Oliver Richard from Kent State University for assisting with reference data collection. This work was supported by NASA New (Early Career) Investigator Program grant 80NSSC21K0937 and the Water Diplomacy Center (WDC) Fellowship at Jordan University of Science and Technology (JUST), including partial support for journal publication fees. This publication was made possible in part by support from the Kent State University Open Access Publishing. 
+We gratefully acknowledge and thank Jackson Miller and Oliver Richard from Kent State University for assisting with reference data collection, and Sam Zipper from University of Kansas for earlier discussion. This work was supported by NASA (80NSSC21K0937) and the Water Diplomacy Center (WDC) Fellowship at Jordan University of Science and Technology (JUST), including partial support for journal publication fees. This publication was made possible in part by support from the Kent State University Open Access Publishing.  
 
 ---
 
